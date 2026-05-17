@@ -2,13 +2,25 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Loader2, Users, DollarSign, CheckSquare, Gamepad2, GitBranch } from 'lucide-react'
+
+import {
+  Loader2,
+  Users,
+  DollarSign,
+  CheckSquare,
+  Gamepad2,
+  GitBranch,
+  Activity,
+} from 'lucide-react'
+
 import { api } from '@/lib/api'
 import type { DashboardData } from '@/lib/types'
 import { formatRelativeTime } from '@/lib/format'
+
 import {
   Area,
   AreaChart,
@@ -18,7 +30,45 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  CartesianGrid,
 } from 'recharts'
+
+const axisStyle = {
+  fontSize: 11,
+  fill: 'var(--muted-foreground)',
+}
+
+function CustomTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null
+
+  return (
+    <div className="rounded-xl border border-border/60 bg-background/95 backdrop-blur px-3 py-2 shadow-2xl">
+      <p className="text-xs text-muted-foreground mb-2">{label}</p>
+
+      {payload.map((item: any) => (
+        <div
+          key={item.name}
+          className="flex items-center justify-between gap-6 text-sm"
+        >
+          <div className="flex items-center gap-2">
+            <div
+              className="w-2.5 h-2.5 rounded-full"
+              style={{ backgroundColor: item.color }}
+            />
+
+            <span className="capitalize text-muted-foreground">
+              {item.name}
+            </span>
+          </div>
+
+          <span className="font-semibold tabular-nums">
+            {Number(item.value).toLocaleString()}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export function DashboardContent() {
   const [data, setData] = useState<DashboardData | null>(null)
@@ -29,7 +79,9 @@ export function DashboardContent() {
     api
       .getDashboard()
       .then(setData)
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
+      .catch((e) =>
+        setError(e instanceof Error ? e.message : 'Failed to load')
+      )
       .finally(() => setLoading(false))
   }, [])
 
@@ -49,95 +101,252 @@ export function DashboardContent() {
     )
   }
 
-  const revenue = (data.stats.totalRevenueCents / 100).toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  })
+  const revenue = (data.stats.totalRevenueCents / 100).toLocaleString(
+    'en-US',
+    {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0,
+    }
+  )
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Studio Dashboard</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-3xl font-bold tracking-tight">
+          Studio Dashboard
+        </h1>
+
+        <p className="text-muted-foreground mt-1">
           Roblox experiences, live tasks, and recent GitHub activity
         </p>
       </div>
 
+      {/* Stats */}
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={Users} title="Concurrent players" value={data.stats.totalCcu.toLocaleString()} />
-        <StatCard icon={Gamepad2} title="Experiences" value={String(data.stats.experienceCount)} />
-        <StatCard icon={CheckSquare} title="Active tasks" value={String(data.stats.activeTasks)} />
-        <StatCard icon={DollarSign} title="Revenue (latest)" value={revenue} />
+        <StatCard
+          icon={Users}
+          title="Concurrent players"
+          value={data.stats.totalCcu.toLocaleString()}
+        />
+
+        <StatCard
+          icon={Gamepad2}
+          title="Experiences"
+          value={String(data.stats.experienceCount)}
+        />
+
+        <StatCard
+          icon={CheckSquare}
+          title="Active tasks"
+          value={String(data.stats.activeTasks)}
+        />
+
+        <StatCard
+          icon={DollarSign}
+          title="Revenue"
+          value={revenue}
+        />
       </div>
 
+      {/* Charts */}
+
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
+        {/* CCU */}
+
+        <Card className="overflow-hidden border-border/50 bg-gradient-to-b from-card to-card/50">
           <CardHeader>
-            <CardTitle className="text-base">CCU trend</CardTitle>
-            <CardDescription>From analytics snapshots — add data in Analytics</CardDescription>
+            <CardTitle className="text-base">
+              CCU Trend
+            </CardTitle>
+
+            <CardDescription>
+              Concurrent player history
+            </CardDescription>
           </CardHeader>
-          <CardContent className="h-56">
+
+          <CardContent className="h-[320px] pt-0">
             {data.chartData.ccuHistory.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={data.chartData.ccuHistory}>
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fill="hsl(var(--primary)/0.2)" />
+                  <defs>
+                    <linearGradient
+                      id="dashboardGradient"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop
+                        offset="0%"
+                        stopColor="var(--primary)"
+                        stopOpacity={0.4}
+                      />
+
+                      <stop
+                        offset="100%"
+                        stopColor="var(--primary)"
+                        stopOpacity={0}
+                      />
+                    </linearGradient>
+                  </defs>
+
+                  <CartesianGrid
+                    vertical={false}
+                    strokeDasharray="3 3"
+                    stroke="var(--border)/0.6"
+                  />
+
+                  <XAxis
+                    dataKey="date"
+                    tick={axisStyle}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+
+                  <YAxis
+                    tick={axisStyle}
+                    axisLine={false}
+                    tickLine={false}
+                    width={40}
+                  />
+
+                  <Tooltip content={<CustomTooltip />} />
+
+                  <Area
+                    type="monotone"
+                    dataKey="value"
+                    stroke="var(--primary)"
+                    fill="url(#dashboardGradient)"
+                    strokeWidth={3}
+                    dot={false}
+                    isAnimationActive
+                    animationDuration={800}
+                    activeDot={{
+                      r: 5,
+                      fill: 'var(--primary)',
+                    }}
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <EmptyChart hint="Record a snapshot in Analytics" />
+              <EmptyChart hint="Record analytics snapshots to see trends" />
             )}
           </CardContent>
         </Card>
-        <Card>
+
+        {/* Revenue */}
+
+        <Card className="overflow-hidden border-border/50 bg-gradient-to-b from-card to-card/50">
           <CardHeader>
-            <CardTitle className="text-base">Revenue trend</CardTitle>
+            <CardTitle className="text-base">
+              Revenue Trend
+            </CardTitle>
+
+            <CardDescription>
+              Snapshot revenue performance
+            </CardDescription>
           </CardHeader>
-          <CardContent className="h-56">
+
+          <CardContent className="h-[320px] pt-0">
             {data.chartData.revenueHistory.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.chartData.revenueHistory}>
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Bar dataKey="value" fill="hsl(var(--chart-2))" radius={4} />
+                  <CartesianGrid
+                    vertical={false}
+                    strokeDasharray="3 3"
+                    stroke="var(--border)/0.6"
+                  />
+
+                  <XAxis
+                    dataKey="date"
+                    tick={axisStyle}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+
+                  <YAxis
+                    tick={axisStyle}
+                    axisLine={false}
+                    tickLine={false}
+                    width={40}
+                  />
+
+                  <Tooltip content={<CustomTooltip />} />
+
+                  <Bar
+                    dataKey="value"
+                    fill="var(--chart-2)"
+                    radius={[8, 8, 0, 0]}
+                    isAnimationActive
+                    animationDuration={800}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <EmptyChart hint="Record a snapshot in Analytics" />
+              <EmptyChart hint="Revenue data will appear here" />
             )}
           </CardContent>
         </Card>
       </div>
 
+      {/* Bottom */}
+
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+        {/* Experiences */}
+
+        <Card className="lg:col-span-2 border-border/50 bg-card/50 backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-base">Experiences</CardTitle>
-              <CardDescription>Your Roblox games in this workspace</CardDescription>
+              <CardTitle className="text-base">
+                Experiences
+              </CardTitle>
+
+              <CardDescription>
+                Your Roblox games
+              </CardDescription>
             </div>
+
             <Button variant="outline" size="sm" asChild>
-              <Link href="/settings">Add experience</Link>
+              <Link href="/settings">
+                Add experience
+              </Link>
             </Button>
           </CardHeader>
+
           <CardContent className="grid gap-3 sm:grid-cols-2">
             {data.experiences.length === 0 ? (
               <p className="text-sm text-muted-foreground col-span-2">
-                No experiences yet. Add one in Settings → Experiences.
+                No experiences yet
               </p>
             ) : (
               data.experiences.map((exp) => (
-                <div key={exp.id} className="rounded-lg border border-border p-3">
+                <div
+                  key={exp.id}
+                  className="
+                    rounded-xl
+                    border
+                    border-border/50
+                    bg-card/40
+                    p-4
+                    transition-all
+                    duration-300
+                    hover:border-primary/30
+                  "
+                >
                   <div className="flex items-center justify-between">
-                    <p className="font-medium text-sm">{exp.name}</p>
-                    <Badge variant="secondary">{exp.status}</Badge>
+                    <p className="font-medium text-sm">
+                      {exp.name}
+                    </p>
+
+                    <Badge variant="secondary">
+                      {exp.status}
+                    </Badge>
                   </div>
+
                   {exp.robloxUniverseId ? (
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-xs text-muted-foreground mt-2">
                       Universe {exp.robloxUniverseId}
                     </p>
                   ) : null}
@@ -147,23 +356,42 @@ export function DashboardContent() {
           </CardContent>
         </Card>
 
-        <Card>
+        {/* Tasks */}
+
+        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
           <CardHeader>
-            <CardTitle className="text-base">Active tasks</CardTitle>
+            <CardTitle className="text-base">
+              Active Tasks
+            </CardTitle>
+
             <Button variant="link" size="sm" className="px-0" asChild>
-              <Link href="/tasks">View all</Link>
+              <Link href="/tasks">
+                View all
+              </Link>
             </Button>
           </CardHeader>
+
           <CardContent className="space-y-3">
             {data.recentTasks.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No open tasks</p>
+              <p className="text-sm text-muted-foreground">
+                No open tasks
+              </p>
             ) : (
               data.recentTasks.map((t) => (
-                <div key={t.id} className="flex items-start gap-2 text-sm">
+                <div
+                  key={t.id}
+                  className="flex items-start gap-2 text-sm"
+                >
                   <CheckSquare className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+
                   <div className="min-w-0">
-                    <p className="font-medium truncate">{t.title}</p>
-                    <p className="text-xs text-muted-foreground">{t.status.replace('-', ' ')}</p>
+                    <p className="font-medium truncate">
+                      {t.title}
+                    </p>
+
+                    <p className="text-xs text-muted-foreground">
+                      {t.status.replace('-', ' ')}
+                    </p>
                   </div>
                 </div>
               ))
@@ -172,30 +400,59 @@ export function DashboardContent() {
         </Card>
       </div>
 
-      <Card>
+      {/* Commits */}
+
+      <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <GitBranch className="w-4 h-4" />
             Recent commits
           </CardTitle>
-          <CardDescription>From your linked GitHub repo</CardDescription>
+
+          <CardDescription>
+            Latest GitHub repository activity
+          </CardDescription>
         </CardHeader>
+
         <CardContent className="space-y-3">
           {data.recentCommits.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Link a repo in Settings and set GITHUB_TOKEN on the backend.
+              Link a GitHub repository to display commits
             </p>
           ) : (
             data.recentCommits.map((c) => (
-              <div key={c.id} className="flex items-start justify-between gap-4 text-sm border-b border-border pb-3 last:border-0">
+              <div
+                key={c.id}
+                className="
+                  flex
+                  items-start
+                  justify-between
+                  gap-4
+                  border-b
+                  border-border/50
+                  pb-3
+                  text-sm
+                  last:border-0
+                "
+              >
                 <div className="min-w-0">
-                  <p className="font-medium truncate">{c.message}</p>
+                  <p className="font-medium truncate">
+                    {c.message}
+                  </p>
+
                   <p className="text-xs text-muted-foreground">
-                    {c.authorName} · {c.branch} · {formatRelativeTime(c.committedAt)}
+                    {c.authorName} · {c.branch} ·{' '}
+                    {formatRelativeTime(c.committedAt)}
                   </p>
                 </div>
+
                 {c.htmlUrl ? (
-                  <a href={c.htmlUrl} target="_blank" rel="noreferrer" className="text-xs text-primary shrink-0">
+                  <a
+                    href={c.htmlUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-primary shrink-0"
+                  >
                     View
                   </a>
                 ) : null}
@@ -218,15 +475,32 @@ function StatCard({
   value: string
 }) {
   return (
-    <Card>
+    <Card
+      className="
+        border-border/50
+        bg-card/50
+        backdrop-blur-sm
+        transition-all
+        duration-300
+        hover:border-primary/30
+        hover:shadow-lg
+        hover:shadow-primary/5
+      "
+    >
       <CardContent className="pt-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
+        <div className="flex items-center gap-4">
+          <div className="rounded-xl bg-primary/10 p-3">
             <Icon className="w-5 h-5 text-primary" />
           </div>
+
           <div>
-            <p className="text-xs text-muted-foreground">{title}</p>
-            <p className="text-xl font-semibold">{value}</p>
+            <p className="text-xs text-muted-foreground">
+              {title}
+            </p>
+
+            <p className="text-2xl font-bold tracking-tight tabular-nums">
+              {value}
+            </p>
           </div>
         </div>
       </CardContent>
@@ -236,8 +510,18 @@ function StatCard({
 
 function EmptyChart({ hint }: { hint: string }) {
   return (
-    <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
-      {hint}
+    <div className="flex h-full flex-col items-center justify-center text-center">
+      <div className="rounded-full bg-muted p-3 mb-3">
+        <Activity className="w-5 h-5 text-muted-foreground" />
+      </div>
+
+      <p className="text-sm font-medium">
+        No chart data
+      </p>
+
+      <p className="text-xs text-muted-foreground mt-1">
+        {hint}
+      </p>
     </div>
   )
 }
