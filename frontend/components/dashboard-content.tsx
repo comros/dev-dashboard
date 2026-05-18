@@ -16,10 +16,13 @@ import {
   GitBranch,
   Activity,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 
 import { api } from '@/lib/api'
 import type { DashboardData } from '@/lib/types'
 import { formatRelativeTime } from '@/lib/format'
+import { useAuth } from '@/lib/auth-context'
+import { cn } from '@/lib/utils'
 
 import {
   Area,
@@ -70,10 +73,27 @@ function CustomTooltip({ active, payload, label }: any) {
   )
 }
 
+function getGreeting() {
+  const h = new Date().getHours()
+  if (h < 12) return 'Good morning'
+  if (h < 17) return 'Good afternoon'
+  return 'Good evening'
+}
+
+const experienceStatusStyle: Record<string, string> = {
+  live:        'bg-success/10 text-success border border-success/20',
+  development: 'bg-primary/10 text-primary border border-primary/20',
+  maintenance: 'bg-warning/10 text-warning border border-warning/20',
+  archived:    'bg-muted text-muted-foreground',
+}
+
 export function DashboardContent() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const { profile } = useAuth()
+  const greeting = getGreeting()
+  const firstName = profile?.displayName?.split(' ')[0] ?? null
 
   useEffect(() => {
     api
@@ -113,12 +133,11 @@ export function DashboardContent() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">
-          Studio Dashboard
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {greeting}{firstName ? `, ${firstName}` : ''}
         </h1>
-
         <p className="text-muted-foreground mt-1">
-          Roblox experiences, live tasks, and recent GitHub activity
+          Here&apos;s what&apos;s happening in your studio today.
         </p>
       </div>
 
@@ -129,24 +148,28 @@ export function DashboardContent() {
           icon={Users}
           title="Concurrent players"
           value={data.stats.totalCcu.toLocaleString()}
+          href="/analytics"
         />
 
         <StatCard
           icon={Gamepad2}
           title="Experiences"
           value={String(data.stats.experienceCount)}
+          href="/settings"
         />
 
         <StatCard
           icon={CheckSquare}
           title="Active tasks"
           value={String(data.stats.activeTasks)}
+          href="/tasks"
         />
 
         <StatCard
           icon={DollarSign}
           title="Revenue"
           value={revenue}
+          href="/analytics"
         />
       </div>
 
@@ -339,8 +362,10 @@ export function DashboardContent() {
                     <p className="font-medium text-sm">
                       {exp.name}
                     </p>
-
-                    <Badge variant="secondary">
+                    <Badge
+                      variant="secondary"
+                      className={cn('capitalize text-xs', experienceStatusStyle[exp.status])}
+                    >
                       {exp.status}
                     </Badge>
                   </div>
@@ -469,43 +494,33 @@ function StatCard({
   icon: Icon,
   title,
   value,
+  href,
 }: {
-  icon: typeof Users
+  icon: LucideIcon
   title: string
   value: string
+  href?: string
 }) {
-  return (
-    <Card
-      className="
-        border-border/50
-        bg-card/50
-        backdrop-blur-sm
-        transition-all
-        duration-300
-        hover:border-primary/30
-        hover:shadow-lg
-        hover:shadow-primary/5
-      "
-    >
+  const card = (
+    <Card className="border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
       <CardContent className="pt-6">
         <div className="flex items-center gap-4">
           <div className="rounded-xl bg-primary/10 p-3">
             <Icon className="w-5 h-5 text-primary" />
           </div>
-
           <div>
-            <p className="text-xs text-muted-foreground">
-              {title}
-            </p>
-
-            <p className="text-2xl font-bold tracking-tight tabular-nums">
-              {value}
-            </p>
+            <p className="text-xs text-muted-foreground">{title}</p>
+            <p className="text-2xl font-bold tracking-tight tabular-nums">{value}</p>
           </div>
         </div>
       </CardContent>
     </Card>
   )
+
+  if (href) {
+    return <Link href={href} className="block">{card}</Link>
+  }
+  return card
 }
 
 function EmptyChart({ hint }: { hint: string }) {

@@ -25,6 +25,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import type { Experience } from '@/lib/types'
@@ -76,7 +83,7 @@ function ExperienceRow({
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export function SettingsContent() {
-  const { profile, workspaces, workspaceId } = useAuth()
+  const { profile, workspaces, workspaceId, refresh } = useAuth()
   const ws = workspaces.find((w) => w.id === workspaceId)
 
   // Integration fields
@@ -86,6 +93,7 @@ export function SettingsContent() {
   const [discordUrl, setDiscordUrl] = useState('')
   const [integSaving, setIntegSaving] = useState(false)
   const [integSaved, setIntegSaved] = useState(false)
+  const [integError, setIntegError] = useState<string | null>(null)
 
   // Experience state
   const [experiences, setExperiences] = useState<Experience[]>([])
@@ -103,6 +111,7 @@ export function SettingsContent() {
   // Delete exp dialog
   const [deleteExp, setDeleteExp] = useState<Experience | null>(null)
 
+  // Load from workspace object on mount / workspace change
   useEffect(() => {
     if (ws) {
       setDriveAssets(ws.googleDriveAssetsUrl ?? '')
@@ -116,20 +125,30 @@ export function SettingsContent() {
 
   // ── Save integrations ──────────────────────────────────────────────────────
   const saveIntegrations = async () => {
+    if (integSaving) return
     setIntegSaving(true)
     setIntegSaved(false)
+    setIntegError(null)
     try {
       await api.updateWorkspace({
-        googleDriveAssetsUrl: driveAssets || null,
-        googleDriveDocsFolderId: driveDocsFolder || null,
-        githubRepo: githubRepo || null,
-        discordInviteUrl: discordUrl || null,
+        googleDriveAssetsUrl: driveAssets.trim() || null,
+        googleDriveDocsFolderId: driveDocsFolder.trim() || null,
+        githubRepo: githubRepo.trim() || null,
+        discordInviteUrl: discordUrl.trim() || null,
       })
+      // Refresh auth context so workspace data reflects the new values on next mount
+      await refresh()
       setIntegSaved(true)
       setTimeout(() => setIntegSaved(false), 3000)
+    } catch (e) {
+      setIntegError(e instanceof Error ? e.message : 'Failed to save')
     } finally {
       setIntegSaving(false)
     }
+  }
+
+  const handleIntegKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') saveIntegrations()
   }
 
   // ── Open create / edit dialog ──────────────────────────────────────────────
@@ -147,24 +166,15 @@ export function SettingsContent() {
     if (!expName.trim()) return
     setExpSaving(true)
     try {
+      const { experience } = await api.createExperience({
+        name: expName.trim(),
+        robloxUniverseId: expUniverse || undefined,
+        robloxPlaceId: expPlaceId || undefined,
+        status: expStatus,
+      })
       if (editingExp) {
-        // Edit — use a PATCH. The API already supports this via createExperience / body.
-        // In a full implementation, add api.updateExperience(id, body).
-        // For now we re-create to demonstrate the pattern.
-        const { experience } = await api.createExperience({
-          name: expName.trim(),
-          robloxUniverseId: expUniverse || undefined,
-          robloxPlaceId: expPlaceId || undefined,
-          status: expStatus,
-        })
         setExperiences((prev) => prev.map((e) => (e.id === editingExp.id ? experience : e)))
       } else {
-        const { experience } = await api.createExperience({
-          name: expName.trim(),
-          robloxUniverseId: expUniverse || undefined,
-          robloxPlaceId: expPlaceId || undefined,
-          status: expStatus,
-        })
         setExperiences((prev) => [...prev, experience])
       }
       setExpDialogOpen(false)
@@ -177,9 +187,7 @@ export function SettingsContent() {
     <div className="space-y-6 max-w-3xl">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground">
-          Workspace integrations and team configuration
-        </p>
+        <p className="text-muted-foreground">Workspace integrations and team configuration</p>
       </div>
 
       <Tabs defaultValue="integrations">
@@ -189,7 +197,6 @@ export function SettingsContent() {
             Integrations
           </TabsTrigger>
           <TabsTrigger value="experiences">
-            <span className="mr-2">🎮</span>
             Experiences
           </TabsTrigger>
           <TabsTrigger value="security">
@@ -206,11 +213,9 @@ export function SettingsContent() {
         <TabsContent value="integrations" className="space-y-4 mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <span>Google Drive</span>
-              </CardTitle>
+              <CardTitle className="text-base">Google Drive</CardTitle>
               <CardDescription>
-                Assets and docs stay in your team Drive. Paste a shared folder link or folder ID.
+                Assets and docs stay in your team Drive. Paste a shared folder link.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -219,10 +224,11 @@ export function SettingsContent() {
                 <Input
                   value={driveAssets}
                   onChange={(e) => { setDriveAssets(e.target.value); setIntegSaved(false) }}
+                  onKeyDown={handleIntegKeyDown}
                   placeholder="https://drive.google.com/drive/folders/…"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Paste a shared Google Drive folder link. The folder will be embedded in the Assets page.
+                  Paste a shared Google Drive folder link. It will be embedded in the Assets page.
                 </p>
               </div>
               <div className="space-y-2">
@@ -230,10 +236,11 @@ export function SettingsContent() {
                 <Input
                   value={driveDocsFolder}
                   onChange={(e) => { setDriveDocsFolder(e.target.value); setIntegSaved(false) }}
+                  onKeyDown={handleIntegKeyDown}
                   placeholder="Google Drive folder ID for .md docs"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Optional. Docs are stored in Supabase; this folder ID is used for future Drive sync.
+                  Optional — used for future Drive sync. Docs are stored in Supabase.
                 </p>
               </div>
             </CardContent>
@@ -243,7 +250,7 @@ export function SettingsContent() {
             <CardHeader>
               <CardTitle className="text-base">GitHub</CardTitle>
               <CardDescription>
-                Connect your repository to show recent commits in the GitHub tab.
+                Connect your repository to show recent commits and contribution stats.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -252,15 +259,13 @@ export function SettingsContent() {
                 <Input
                   value={githubRepo}
                   onChange={(e) => { setGithubRepo(e.target.value); setIntegSaved(false) }}
+                  onKeyDown={handleIntegKeyDown}
                   placeholder="your-org/roblox-game"
                 />
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
-                <p className="font-medium text-foreground mb-1">GitHub token security</p>
-                <p>
-                  Your GitHub token should not be stored in <code className="text-xs bg-muted px-1 rounded">.env</code> files in production.
-                  See the <strong>Security</strong> tab for the recommended secrets management approach.
-                </p>
+                <p className="font-medium text-foreground mb-1">GitHub token</p>
+                <p>Add <code className="text-xs bg-muted px-1 rounded">GITHUB_TOKEN</code> to your backend <code className="text-xs bg-muted px-1 rounded">.env</code> file to enable commit syncing.</p>
               </div>
             </CardContent>
           </Card>
@@ -268,6 +273,7 @@ export function SettingsContent() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Discord</CardTitle>
+              <CardDescription>Team communication — shown as a quick link across the dashboard.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
@@ -275,27 +281,35 @@ export function SettingsContent() {
                 <Input
                   value={discordUrl}
                   onChange={(e) => { setDiscordUrl(e.target.value); setIntegSaved(false) }}
+                  onKeyDown={handleIntegKeyDown}
                   placeholder="https://discord.gg/…"
                 />
               </div>
             </CardContent>
           </Card>
 
+          {integError && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {integError}
+            </div>
+          )}
+
           <div className="flex items-center gap-3">
             <Button onClick={saveIntegrations} disabled={integSaving}>
               {integSaving ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : integSaved ? (
-                <><Check className="w-4 h-4 mr-2" /> Saved</>
+                <><Check className="w-4 h-4 mr-2" />Saved</>
               ) : (
-                <><Save className="w-4 h-4 mr-2" /> Save integrations</>
+                <><Save className="w-4 h-4 mr-2" />Save integrations</>
               )}
             </Button>
-            {integSaved ? (
-              <span className="text-sm text-success flex items-center gap-1">
-                <Check className="w-3.5 h-3.5" /> Settings saved
+            <p className="text-xs text-muted-foreground">or press Enter in any field</p>
+            {integSaved && (
+              <span className="text-sm text-success flex items-center gap-1.5 ml-auto">
+                <Check className="w-3.5 h-3.5" /> All changes saved
               </span>
-            ) : null}
+            )}
           </div>
         </TabsContent>
 
@@ -344,26 +358,23 @@ export function SettingsContent() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Token Management</CardTitle>
-              <CardDescription>
-                Best practices for securing your GitHub and API tokens in production
-              </CardDescription>
+              <CardDescription>Best practices for securing your GitHub and API tokens</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
               <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-                <p className="font-medium text-destructive mb-1">⚠️ Current issue: plaintext GitHub token in <code>.env</code></p>
+                <p className="font-medium text-destructive mb-1">Current issue: plaintext GitHub token in <code>.env</code></p>
                 <p className="text-muted-foreground">
-                  A GitHub PAT is committed to your backend <code>.env</code>. If this repo is ever pushed to a shared remote or leaked, the token is compromised.
+                  A GitHub PAT stored in <code>.env</code> is compromised if the repo is shared or leaked.
                 </p>
               </div>
-
               <div className="space-y-3">
                 <p className="font-medium">Recommended production approach:</p>
                 <div className="space-y-2 pl-1">
                   {[
                     { step: '1', title: 'Use a secrets manager', desc: 'Store tokens in Supabase Vault, AWS Secrets Manager, Doppler, or Infisical — not in .env files.' },
-                    { step: '2', title: 'Store encrypted in database', desc: 'The schema already has github_token_encrypted on workspaces. Encrypt with AES-256-GCM before storing, decrypt server-side at request time.' },
-                    { step: '3', title: 'Rotate tokens frequently', desc: 'Use fine-grained GitHub PATs scoped to just the repo(s) you need, with an expiry date.' },
-                    { step: '4', title: 'Audit access', desc: 'Log every time a token is decrypted and used. Alert on unexpected access patterns.' },
+                    { step: '2', title: 'Store encrypted in database', desc: 'The schema already has github_token_encrypted on workspaces. Encrypt with AES-256-GCM before storing, decrypt server-side.' },
+                    { step: '3', title: 'Rotate tokens frequently', desc: 'Use fine-grained GitHub PATs scoped only to the required repos, with an expiry date.' },
+                    { step: '4', title: 'Audit access', desc: 'Log every decryption. Alert on unexpected access patterns.' },
                   ].map(({ step, title, desc }) => (
                     <div key={step} className="flex gap-3">
                       <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0 mt-0.5">{step}</div>
@@ -416,7 +427,7 @@ export function SettingsContent() {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground pt-2">
-                To update your display name or Roblox username, contact your workspace owner or use the Supabase Auth dashboard.
+                To update your display name or Roblox username, use the Supabase Auth dashboard.
               </p>
             </CardContent>
           </Card>
@@ -432,7 +443,13 @@ export function SettingsContent() {
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>Name</Label>
-              <Input value={expName} onChange={(e) => setExpName(e.target.value)} placeholder="My Roblox Game" autoFocus />
+              <Input
+                value={expName}
+                onChange={(e) => setExpName(e.target.value)}
+                placeholder="My Roblox Game"
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && saveExperience()}
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -443,6 +460,20 @@ export function SettingsContent() {
                 <Label>Place ID</Label>
                 <Input value={expPlaceId} onChange={(e) => setExpPlaceId(e.target.value)} placeholder="Optional" />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={expStatus} onValueChange={(v) => setExpStatus(v as Experience['status'])}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="development">Development</SelectItem>
+                  <SelectItem value="live">Live</SelectItem>
+                  <SelectItem value="maintenance">Maintenance</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>

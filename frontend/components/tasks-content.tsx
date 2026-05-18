@@ -71,11 +71,29 @@ const priorityColors = {
   low: 'bg-muted-foreground',
 }
 
+const priorityTextColors = {
+  urgent: 'text-destructive',
+  high: 'text-warning',
+  medium: 'text-primary',
+  low: 'text-muted-foreground',
+}
+
 const priorityLabels = {
   urgent: 'Urgent',
   high: 'High',
   medium: 'Medium',
   low: 'Low',
+}
+
+function DueDateBadge({ date, done }: { date: string; done: boolean }) {
+  const isOverdue = !done && new Date(date) < new Date()
+  return (
+    <div className={cn('flex items-center gap-1 text-xs', isOverdue ? 'text-destructive' : 'text-muted-foreground')}>
+      <Calendar className="w-3 h-3" />
+      {new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+      {isOverdue && <span className="font-semibold">· overdue</span>}
+    </div>
+  )
 }
 
 // ─── Drag state (module-level for simplicity — no library needed) ────────────
@@ -120,54 +138,44 @@ function TaskCard({
         >
           <Card className="py-3 hover:border-primary/30 transition-colors group cursor-grab active:cursor-grabbing select-none">
             <CardContent className="px-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div
-                    className={cn('w-2 h-2 rounded-full shrink-0', priorityColors[task.priority])}
-                    title={priorityLabels[task.priority]}
-                  />
-                  <span className="text-sm font-medium line-clamp-2">{task.title}</span>
-                </div>
-              </div>
+              <p className="text-sm font-medium line-clamp-2">{task.title}</p>
 
               {task.description ? (
-                <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{task.description}</p>
+                <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{task.description}</p>
               ) : null}
 
-              <div className="flex flex-wrap gap-1 mt-3">
-                {task.tags.slice(0, 3).map((tag) => (
-                  <Badge key={tag} variant="secondary" className="text-xs px-1.5 py-0">
-                    {tag}
-                  </Badge>
-                ))}
-                {task.tags.length > 3 ? (
-                  <Badge variant="secondary" className="text-xs px-1.5 py-0">
-                    +{task.tags.length - 3}
-                  </Badge>
-                ) : null}
-              </div>
+              {task.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {task.tags.slice(0, 3).map((tag) => (
+                    <Badge key={tag} variant="secondary" className="text-xs px-1.5 py-0">
+                      {tag}
+                    </Badge>
+                  ))}
+                  {task.tags.length > 3 ? (
+                    <Badge variant="secondary" className="text-xs px-1.5 py-0">
+                      +{task.tags.length - 3}
+                    </Badge>
+                  ) : null}
+                </div>
+              )}
 
-              <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+              <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-border">
                 <div className="flex items-center gap-2">
+                  <span className={cn('flex items-center gap-1 text-xs font-medium', priorityTextColors[task.priority])}>
+                    <div className={cn('w-1.5 h-1.5 rounded-full', priorityColors[task.priority])} />
+                    {priorityLabels[task.priority]}
+                  </span>
                   {task.assignee ? (
                     <div
-                      className="w-6 h-6 rounded-full bg-gradient-to-br from-primary to-chart-2 flex items-center justify-center text-[10px] font-medium text-primary-foreground"
+                      className="w-5 h-5 rounded-full bg-gradient-to-br from-primary to-chart-2 flex items-center justify-center text-[9px] font-medium text-primary-foreground"
                       title={task.assignee.displayName}
                     >
                       {task.assignee.avatarInitials}
                     </div>
                   ) : null}
-                  {expName ? <span className="text-xs text-muted-foreground">{expName}</span> : null}
+                  {expName ? <span className="text-xs text-muted-foreground truncate max-w-[72px]">{expName}</span> : null}
                 </div>
-                {task.dueDate ? (
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Calendar className="w-3 h-3" />
-                    {new Date(task.dueDate).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                  </div>
-                ) : null}
+                {task.dueDate ? <DueDateBadge date={task.dueDate} done={task.status === 'done'} /> : null}
               </div>
             </CardContent>
           </Card>
@@ -205,6 +213,7 @@ function KanbanColumn({
   onEdit,
   onDelete,
   onDrop,
+  onQuickAdd,
 }: {
   column: (typeof columns)[0]
   tasks: Task[]
@@ -212,6 +221,7 @@ function KanbanColumn({
   onEdit: (task: Task) => void
   onDelete: (task: Task) => void
   onDrop: (taskId: string, status: TaskStatus) => void
+  onQuickAdd: () => void
 }) {
   const [isDragOver, setIsDragOver] = useState(false)
   const Icon = column.icon
@@ -225,7 +235,6 @@ function KanbanColumn({
         setIsDragOver(true)
       }}
       onDragLeave={(e) => {
-        // Only clear if leaving the column, not a child
         if (!e.currentTarget.contains(e.relatedTarget as Node)) {
           setIsDragOver(false)
         }
@@ -253,6 +262,15 @@ function KanbanColumn({
             {tasks.length}
           </Badge>
         </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 text-muted-foreground hover:text-foreground hover:bg-secondary"
+          onClick={onQuickAdd}
+          title={`Add task to ${column.title}`}
+        >
+          <Plus className="w-3.5 h-3.5" />
+        </Button>
       </div>
       <div
         className={cn(
@@ -457,6 +475,7 @@ export function TasksContent() {
   // Create / edit dialog
   const [formOpen, setFormOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [newTaskStatus, setNewTaskStatus] = useState<TaskStatus>('backlog')
   const [formSaving, setFormSaving] = useState(false)
 
   // Delete confirmation
@@ -592,6 +611,7 @@ export function TasksContent() {
           <Button
             onClick={() => {
               setEditingTask(null)
+              setNewTaskStatus('backlog')
               setFormOpen(true)
             }}
           >
@@ -674,6 +694,11 @@ export function TasksContent() {
               }}
               onDelete={setDeleteTarget}
               onDrop={handleStatusChange}
+              onQuickAdd={() => {
+                setEditingTask(null)
+                setNewTaskStatus(column.id)
+                setFormOpen(true)
+              }}
             />
           ))}
         </div>
@@ -686,7 +711,7 @@ export function TasksContent() {
           setFormOpen(v)
           if (!v) setEditingTask(null)
         }}
-        initialValues={editingTask ?? {}}
+        initialValues={editingTask ?? { status: newTaskStatus }}
         members={members}
         experiences={experiences}
         onSubmit={editingTask ? handleEdit : handleCreate}
